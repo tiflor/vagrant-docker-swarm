@@ -8,6 +8,12 @@ SUBNET = "10.0.100."
 Vagrant.configure("2") do |config|
   config.ssh.forward_agent = true
 
+  # read ssh public key if exists
+  if File.file?("#{Dir.home}/.ssh/id_rsa.pub")
+    ssh_pub_key = File.readlines("#{Dir.home}/.ssh/id_rsa.pub").first.strip
+  end
+
+  # configure manager
   config.vm.define "manager", primary: true do |manager|
     manager.vm.hostname = "manager"
     manager.vm.box = BOX_IMAGE
@@ -22,6 +28,24 @@ Vagrant.configure("2") do |config|
     for i in 8080..8089
       manager.vm.network :forwarded_port, guest: i, host: i
     end
+    
+    # run shell provisioner to deploy public key to authorized keys
+    manager.vm.provision "shell", run: "always", inline: <<-SHELL
+      if [ -z "#{ssh_pub_key}"  ]; then
+        echo "No public key found exiting."
+        exit 0;
+      else
+        if grep -sq "#{ssh_pub_key}" /home/vagrant/.ssh/authorized_keys; then
+          echo "SSH keys already provisioned."
+          exit 0;
+        else
+          echo "Writing public key to authorized keys."
+          echo #{ssh_pub_key} >> /home/vagrant/.ssh/authorized_keys
+          echo #{ssh_pub_key} >> /root/.ssh/authorized_keys
+        fi
+      fi      
+    SHELL
+
   end
 
   (1..WORKDER_NODES).each do |i|
@@ -34,6 +58,23 @@ Vagrant.configure("2") do |config|
         v.cpus = V_CPUS
         v.memory = V_MEMORY
       end
+      
+      # deploy public key
+      node.vm.provision "shell", run: "always", inline: <<-SHELL
+        if [ -z "#{ssh_pub_key}"  ]; then
+          echo "No public key found exiting."
+          exit 0;
+        else
+          if grep -sq "#{ssh_pub_key}" /home/vagrant/.ssh/authorized_keys; then
+            echo "SSH keys already provisioned."
+            exit 0;
+          else
+            echo "Writing public key to authorized keys."
+            echo #{ssh_pub_key} >> /home/vagrant/.ssh/authorized_keys
+            echo #{ssh_pub_key} >> /root/.ssh/authorized_keys
+          fi
+        fi      
+      SHELL
     end
   end
 
