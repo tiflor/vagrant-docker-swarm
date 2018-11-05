@@ -1,9 +1,14 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# Vars 
 MANAGER_IP = "10.0.100.2"
 BOX_IMAGE = "ubuntu/xenial64"
 V_CPUS = 1
 V_MEMORY = 512
 WORKDER_NODES = 3
 SUBNET = "10.0.100."
+ANSIBLE_INVENTORY = "ansible/hosts"
 
 Vagrant.configure("2") do |config|
   config.ssh.forward_agent = true
@@ -12,6 +17,9 @@ Vagrant.configure("2") do |config|
   if File.file?("#{Dir.home}/.ssh/id_rsa.pub")
     ssh_pub_key = File.readlines("#{Dir.home}/.ssh/id_rsa.pub").first.strip
   end
+
+  #create ansible inventory
+  Dir.mkdir(ANSIBLE_INVENTORY) unless Dir.exists?(ANSIBLE_INVENTORY)
 
   # configure manager
   config.vm.define "manager", primary: true do |manager|
@@ -43,10 +51,17 @@ Vagrant.configure("2") do |config|
           echo #{ssh_pub_key} >> /home/vagrant/.ssh/authorized_keys
           echo #{ssh_pub_key} >> /root/.ssh/authorized_keys
         fi
-      fi      
+      fi
+      apt-add-repository ppa:ansible/ansible
+      apt-get update
+      apt-get install -y software-properties-common ansible
+      apt-get -y dist-upgrade    
     SHELL
 
-  end
+    File.open("#{ANSIBLE_INVENTORY}/vagrant_manager" ,'w') do |f|
+      f.write "manager ansible_connection=local\n"
+    end
+  end # Manager 
 
   (1..WORKDER_NODES).each do |i|
     config.vm.define "workernode-#{i}" do |node|
@@ -75,6 +90,14 @@ Vagrant.configure("2") do |config|
           fi
         fi      
       SHELL
+    end
+
+    # write ansible inventory
+    File.open("#{ANSIBLE_INVENTORY}/vagrant_node-#{i}" ,'w') do |f|
+      f.write "workernode-#{i}      \
+ansible_ssh_host=#{SUBNET}#{i+2} \
+ansible_ssh_private_key_file=/vagrant/.vagrant/machines/workernode-#{i}/virtualbox/private_key \
+ansible_python_interpreter=/usr/bin/python3\n"
     end
   end
 

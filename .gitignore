@@ -1,2 +1,3 @@
 *-console.log
 .vagrant
+ansible/hosts/vagrant_*
